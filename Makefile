@@ -1,5 +1,5 @@
 
-BIN = 4bid-n-asm
+BIN = 4nsm
 VERSION = 0.1.0
 BIN_DIR = bin/lin
 SRC_DIR = src
@@ -20,7 +20,11 @@ release: build
 	@echo '---> Creating release...'
 	cp $(BIN_DIR)/$(BIN) .
 	zip -r -o $(RELEASE) \
-		$(BIN) options.json README.md examples
+		$(BIN) README.md examples
 	mv $(RELEASE) $(REL_DIR)/$(RELEASE)
 	rm $(BIN)
 	@echo '---> Done'
+
+install: build
+	@echo '---> Installing...'
+	ln -s $(PWD)/$(BIN_DIR)/$(BIN) /usr/bin/4nsm

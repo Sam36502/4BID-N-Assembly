@@ -40,13 +40,19 @@ can be read by the 4BID-N fantasy console.`,
 		}
 
 		// Read and parse infile
-		prog, errs := asm.ParseFile(infile)
+		prog, warns, errs := asm.ParseFile(infile)
 		if len(errs) > 0 {
 			fmt.Println("Assembly failed:")
 			for _, err := range errs {
 				fmt.Printf("  %v\n", err)
 			}
 			return
+		}
+		if len(warns) > 0 {
+			fmt.Println("Warnings:")
+			for _, warn := range warns {
+				fmt.Printf("  %s\n", warn)
+			}
 		}
 
 		// Generate and save output file

@@ -17,9 +17,10 @@ type Program []Instruction
 
 var g_lineNr = 0
 
-// Parses a file into a program and returns a list of errors
-func ParseFile(filename string) (Program, []error) {
+// Parses a file into a program and returns a list of warnings and a list of errors
+func ParseFile(filename string) (Program, []string, []error) {
 	errors := []error{}
+	warns := []string{}
 	program := Program{}
 
 	labels := map[string]byte{}
@@ -29,7 +30,7 @@ func ParseFile(filename string) (Program, []error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		errors = append(errors, err)
-		return program, errors
+		return program, warns, errors
 	}
 
 	// Parse file line by line
@@ -56,6 +57,11 @@ func ParseFile(filename string) (Program, []error) {
 		case DD_LABEL:
 			if len(fields) != 2 {
 				errors = append(errors, FormatSyntaxError("label dot-directive requires exactly 1 argument: label name"))
+				continue
+			}
+			if insNr, ex := labels[fields[1]]; ex {
+				errors = append(errors, FormatSyntaxError(fmt.Sprintf("label already defined for instruction nr. 0x%02X", insNr)))
+				continue
 			}
 			labels[fields[1]] = insPointer
 			continue
@@ -64,21 +70,32 @@ func ParseFile(filename string) (Program, []error) {
 			if len(fields) != 3 {
 				errors = append(errors, FormatSyntaxError("definition dot-directive requires exactly 2 arguments: name & value"))
 			}
+			if def, ex := definitions[fields[1]]; ex {
+				warns = append(warns, FormatWarning(fmt.Sprintf("definition '%s' redefined", def)))
+				continue
+			}
 			definitions[fields[1]] = fields[2]
 			continue
 
 		}
 
 		// Parse Arguments
-		arg1, isImmediate, err := parseArgument(definitions, fields[1])
-		if err != nil {
-			errors = append(errors, err)
-			continue
+		var isImmediate bool
+		var arg1, arg2 byte = 0, 0
+		if len(fields) > 1 {
+			arg1, isImmediate, err = parseArgument(definitions, labels, fields[1])
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
 		}
-		arg2, _, err := parseArgument(definitions, fields[2])
-		if err != nil {
-			errors = append(errors, err)
-			continue
+
+		if len(fields) > 2 {
+			arg2, _, err = parseArgument(definitions, labels, fields[2])
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
 		}
 
 		// Parse Opcode
@@ -98,13 +115,14 @@ func ParseFile(filename string) (Program, []error) {
 		}
 
 		program = append(program, ins)
+		insPointer++
 	}
 
-	return program, errors
+	return program, warns, errors
 }
 
 // Returns value, whether it's immediate or an address
-func parseArgument(definitions map[string]string, str string) (byte, bool, error) {
+func parseArgument(definitions map[string]string, labels map[string]byte, str string) (byte, bool, error) {
 	str = strings.TrimSpace(str)
 	originalStr := str
 
@@ -121,9 +139,18 @@ func parseArgument(definitions map[string]string, str string) (byte, bool, error
 		str = def
 	}
 
-	// Check if it's a numeric literal
+	// ...or a label
+	if lbl, exists := labels[str]; exists {
+		str = fmt.Sprintf("%d", lbl)
+		isImmediate = true
+	}
+
+	// Otherwise it's a numeric literal
 	for base, prefix := range NUM_PREFIXES {
 		if strings.HasPrefix(str, prefix) {
+			if len(strings.TrimPrefix(str, prefix)) == 0 {
+				continue
+			}
 			str = strings.TrimPrefix(str, prefix)
 			value, err := strconv.ParseUint(str, base, 64)
 			if err != nil {
@@ -137,5 +164,9 @@ func parseArgument(definitions map[string]string, str string) (byte, bool, error
 }
 
 func FormatSyntaxError(msg string) error {
-	return fmt.Errorf("[%d] Syntax Error: %s", g_lineNr, msg)
+	return fmt.Errorf("[%03d] Syntax Error: %s", g_lineNr+1, msg)
+}
+
+func FormatWarning(msg string) string {
+	return fmt.Sprintf("[%03d] Warning: %s", g_lineNr+1, msg)
 }
