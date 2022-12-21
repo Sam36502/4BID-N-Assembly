@@ -1,0 +1,18 @@
+; Simple test program to draw a diagonal line across the screen
+
+.def pos 0                      ; Initialise X/Y pos var
+    LDA     #0
+    STA     pos         _0page
+
+.label loop
+    STA     _scr_x      _fpage  ; Select the next pixel
+    STA     _scr_y      _fpage
+
+    LDA     #1                  ; Set pixel on
+    STA     _scr_val    _fpage
+
+    LDA     pos         _0page  ; Increment position
+    INC     #1
+    STA     pos         _0page
+
+    JMP     loop

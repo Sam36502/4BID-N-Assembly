@@ -5,13 +5,17 @@ package cmd
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 
+	"github.com/Sam36502/4BID-N-Assembly/src/asm"
 	"github.com/spf13/cobra"
 )
 
 const (
-	FLAG_DEBUG = "debug"
+	FLAG_DEBUG  = "debug"
+	FLAG_OUTPUT = "outfile"
+	FILE_MODE   = 0650
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -21,7 +25,45 @@ var rootCmd = &cobra.Command{
 	Long: `Takes an assembly file and creates a binary that
 can be read by the 4BID-N fantasy console.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Called")
+
+		// Get arguments
+		if len(args) != 1 {
+			fmt.Println("Exactly one argument is required: input assembly file")
+			return
+		}
+		infile := args[0]
+
+		outfile, err := cmd.Flags().GetString(FLAG_OUTPUT)
+		if err != nil {
+			fmt.Println("Failed to read outfile flag: ", err)
+			return
+		}
+
+		// Read and parse infile
+		prog, errs := asm.ParseFile(infile)
+		if len(errs) > 0 {
+			fmt.Println("Assembly failed:")
+			for _, err := range errs {
+				fmt.Printf("  %v\n", err)
+			}
+			return
+		}
+
+		// Generate and save output file
+		data := make([]byte, len(prog)*2)
+		for progi, ins := range prog {
+			i := progi * 2
+			data[i] = ins.Ins % 16
+			data[i+1] = (ins.Arg1%16)<<4 | (ins.Arg2 % 16)
+		}
+
+		err = ioutil.WriteFile(outfile, data, FILE_MODE)
+		if err != nil {
+			fmt.Println("Failed to write outfile: ", err)
+			return
+		}
+
+		fmt.Printf("Program assembled to '%s'\n", outfile)
 	},
 }
 
@@ -35,5 +77,6 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.Flags().BoolP(FLAG_DEBUG, "d", false, "Prints out the program binary once its assembled")
+	rootCmd.Flags().BoolP(FLAG_DEBUG, "d", false, "Prints out the program binary once its assembled (WIP)")
+	rootCmd.Flags().StringP(FLAG_OUTPUT, "o", "a.out", "The file to output to")
 }
