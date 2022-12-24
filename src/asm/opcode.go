@@ -41,8 +41,8 @@ var ALL_OPCODES = []Opcode{
 		Arg2:   ARG_ADDRESS,
 	},
 	{
-		Name:   "INC",
-		Binary: ASM_INC,
+		Name:   "IDC",
+		Binary: ASM_IDC,
 		Arg1:   ARG_IMMEDIATE,
 		Arg2:   ARG_IMMEDIATE,
 	},

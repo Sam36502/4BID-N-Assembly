@@ -27,4 +27,4 @@ release: build
 
 install: build
 	@echo '---> Installing...'
-	ln -s $(PWD)/$(BIN_DIR)/$(BIN) /usr/bin/4nsm
+	sudo ln -s $(PWD)/$(BIN_DIR)/$(BIN) /usr/bin/4nsm

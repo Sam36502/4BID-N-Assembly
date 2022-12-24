@@ -15,8 +15,7 @@ const (
 // Number Formats
 var NUM_PREFIXES = map[int]string{
 	2:  "b", // Binary prefix
-	8:  "0", // Octal prefix
-	10: "",  // Decimal prefix
+	8:  "o", // Octal prefix
 	16: "$", // Hexadecimal prefix
 }
 
@@ -27,7 +26,7 @@ const (
 	ASM_LDAM = 0x2 // Load memory value to acc
 	ASM_STA  = 0x3 // Store acc to memory
 
-	ASM_INC = 0x4 // Increment/Decrement acc
+	ASM_IDC = 0x4 // Increment/Decrement acc
 	ASM_ADD = 0x5 // Add memory value to acc
 	//ASM_000 = 0x6 //
 	//ASM_000 = 0x7 //

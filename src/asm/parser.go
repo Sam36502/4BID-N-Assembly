@@ -124,10 +124,9 @@ func ParseFile(filename string) (Program, []string, []error) {
 // Returns value, whether it's immediate or an address
 func parseArgument(definitions map[string]string, labels map[string]byte, str string) (byte, bool, error) {
 	str = strings.TrimSpace(str)
-	originalStr := str
+	origString := str
 
 	// Check if it's an immediate value
-	var value byte = 0
 	isImmediate := false
 	if strings.HasPrefix(str, CHARS_IMMEDIATE) {
 		isImmediate = true
@@ -145,22 +144,24 @@ func parseArgument(definitions map[string]string, labels map[string]byte, str st
 		isImmediate = true
 	}
 
-	// Otherwise it's a numeric literal
+	// Check if it's a numeric literal in non-decimal
 	for base, prefix := range NUM_PREFIXES {
 		if strings.HasPrefix(str, prefix) {
-			if len(strings.TrimPrefix(str, prefix)) == 0 {
-				continue
-			}
 			str = strings.TrimPrefix(str, prefix)
 			value, err := strconv.ParseUint(str, base, 64)
 			if err != nil {
-				return 0, isImmediate, FormatSyntaxError(fmt.Sprintf("Invalid numeric literal '%s'", originalStr))
+				return 0, isImmediate, FormatSyntaxError(fmt.Sprintf("Invalid numeric literal '%s' --> '%s'", origString, str))
 			}
 			return byte(value), isImmediate, nil
 		}
 	}
 
-	return value, isImmediate, FormatSyntaxError(fmt.Sprintf("Invalid argument '%s'", originalStr))
+	// ...otherwise, it's a decimal number
+	value64, err := strconv.ParseUint(str, 10, 64)
+	if err != nil {
+		return 0, isImmediate, FormatSyntaxError(fmt.Sprintf("Invalid numeric literal '%s'", str))
+	}
+	return byte(value64), isImmediate, nil
 }
 
 func FormatSyntaxError(msg string) error {
