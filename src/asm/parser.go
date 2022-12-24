@@ -106,6 +106,10 @@ func ParseFile(filename string) (Program, []string, []error) {
 				opcode = op
 			}
 		}
+		if opcode == (Opcode{}) {
+			errors = append(errors, FormatSyntaxError(fmt.Sprintf("No opcode '%s' found", fields[0])))
+			continue
+		}
 
 		// Generate instruction
 		ins := Instruction{

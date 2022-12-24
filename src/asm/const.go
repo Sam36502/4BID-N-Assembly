@@ -56,13 +56,14 @@ const (
 
 	FPG_BEEP_VOL = 0x8 // Beeper Volume
 	FPG_BEEP_PTC = 0x9 // Beeper Pitch
-	//FPG_BEEP_ = 0xA // Beeper reserved
-	//FPG_BEEP_ = 0xB // Beeper reserved
+	FPG_BEEP_OPT = 0xA // Beeper reserved
 
-	FPG_RAND = 0xC // Pseudo-Random Number
-	//FPG_ = 0xD //
-	//FPG_ = 0xE //
-	//FPG_ = 0xF //
+	FPG_RAND = 0xB // Pseudo-Random Number
+
+	FPG_DSK_H   = 0xC // High-nyble of disk address   \
+	FPG_DSK_M   = 0xD // Middle-nyble of disk address  } 12-bit Address
+	FPG_DSK_L   = 0xE // Low-nyble of disk address    /
+	FPG_DSK_VAL = 0xF // Value of the selected disk nyble
 )
 
 var DEFAULT_DEFINITIONS = map[string]string{
@@ -81,8 +82,12 @@ var DEFAULT_DEFINITIONS = map[string]string{
 
 	"_snd_vol": "8",
 	"_snd_ptc": "9",
-	//"_snd_0": "10",
-	//"_snd_1": "11",
+	"_snd_opt": "10",
 
-	"_rand": "12",
+	"_rand": "11",
+
+	"_dsk_h":   "12",
+	"_dsk_m":   "13",
+	"_dsk_l":   "14",
+	"_dsk_val": "15",
 }
