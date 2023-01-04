@@ -10,6 +10,7 @@ const (
 const (
 	DD_LABEL = ".label"
 	DD_DEF   = ".def"
+	DD_EBR   = ".ebr"
 )
 
 // Number Formats

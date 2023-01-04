@@ -41,6 +41,30 @@ can be read by the 4BID-N fantasy console.`,
 
 		// Read and parse infile
 		prog, warns, errs := asm.ParseFile(infile)
+
+		// Display debug view if enabled
+		if cmd.Flag(FLAG_DEBUG).Changed {
+			fmt.Println("            -- Debug Output -- ")
+			fmt.Println(" ----------------------------------------")
+			for i, ins := range prog {
+				opcode := ""
+				for _, o := range asm.ALL_OPCODES {
+					if o.Binary == ins.Ins {
+						opcode = o.Name
+						break
+					}
+				}
+				fmt.Printf(
+					"  %03d: %04b (%s) %04b %04b  |  %02x %02x %02x\n",
+					i,
+					ins.Ins, opcode, ins.Arg1, ins.Arg2,
+					ins.Ins, ins.Arg1, ins.Arg2,
+				)
+			}
+			fmt.Println(" ----------------------------------------")
+		}
+
+		// Display errors/warnings if present
 		if len(errs) > 0 {
 			fmt.Println("Assembly failed:")
 			for _, err := range errs {
@@ -83,6 +107,6 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.Flags().BoolP(FLAG_DEBUG, "d", false, "Prints out the program binary once its assembled (WIP)")
+	rootCmd.Flags().BoolP(FLAG_DEBUG, "d", false, "Prints out the program binary once its assembled")
 	rootCmd.Flags().StringP(FLAG_OUTPUT, "o", "a.out", "The file to output to")
 }
