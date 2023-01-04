@@ -44,8 +44,8 @@ can be read by the 4BID-N fantasy console.`,
 
 		// Display debug view if enabled
 		if cmd.Flag(FLAG_DEBUG).Changed {
-			fmt.Println("            -- Debug Output -- ")
-			fmt.Println(" ----------------------------------------")
+			fmt.Println("           -- Debug Output -- ")
+			fmt.Println(" -------------------------------------")
 			for i, ins := range prog {
 				opcode := ""
 				for _, o := range asm.ALL_OPCODES {
@@ -55,13 +55,13 @@ can be read by the 4BID-N fantasy console.`,
 					}
 				}
 				fmt.Printf(
-					"  %03d: %04b (%s) %04b %04b  |  %02x %02x %02x\n",
+					"  %03d: %04b (%s) %04b %04b  |  %02x %x%x\n",
 					i,
 					ins.Ins, opcode, ins.Arg1, ins.Arg2,
 					ins.Ins, ins.Arg1, ins.Arg2,
 				)
 			}
-			fmt.Println(" ----------------------------------------")
+			fmt.Println(" -------------------------------------")
 		}
 
 		// Display errors/warnings if present

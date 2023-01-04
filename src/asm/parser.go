@@ -16,15 +16,14 @@ type Instruction struct {
 type Program []Instruction
 
 var g_lineNr = 0
+var g_definitions = DEFAULT_DEFINITIONS
+var g_branches = []byte{}
 
 // Parses a file into a program and returns a list of warnings and a list of errors
 func ParseFile(filename string) (Program, []string, []error) {
 	errors := []error{}
 	warns := []string{}
 	program := Program{}
-
-	labels := map[string]byte{}
-	definitions := DEFAULT_DEFINITIONS
 
 	// Load File
 	data, err := ioutil.ReadFile(filename)
@@ -59,22 +58,34 @@ func ParseFile(filename string) (Program, []string, []error) {
 				errors = append(errors, FormatSyntaxError("label dot-directive requires exactly 1 argument: label name"))
 				continue
 			}
-			if insNr, ex := labels[fields[1]]; ex {
+			if insNr, ex := g_definitions[fields[1]]; ex {
 				errors = append(errors, FormatSyntaxError(fmt.Sprintf("label already defined for instruction nr. 0x%02X", insNr)))
 				continue
 			}
-			labels[fields[1]] = insPointer
+			g_definitions[fields[1]] = fmt.Sprint(insPointer)
 			continue
 
 		case DD_DEF:
 			if len(fields) != 3 {
 				errors = append(errors, FormatSyntaxError("definition dot-directive requires exactly 2 arguments: name & value"))
+				continue
 			}
-			if def, ex := definitions[fields[1]]; ex {
+			if def, ex := g_definitions[fields[1]]; ex {
 				warns = append(warns, FormatWarning(fmt.Sprintf("definition '%s' redefined", def)))
 				continue
 			}
-			definitions[fields[1]] = fields[2]
+			g_definitions[fields[1]] = fields[2]
+			continue
+
+		case DD_EBR:
+			if len(g_branches) == 0 {
+				errors = append(errors, FormatSyntaxError("end-branch dot-directive used, but no empty BNE's found"))
+				continue
+			}
+			branchLine := g_branches[len(g_branches)-1]
+			g_branches = g_branches[:len(g_branches)-1]
+			skipLines := insPointer - branchLine - 1
+			program[branchLine].Arg2 = skipLines
 			continue
 
 		}
@@ -83,7 +94,7 @@ func ParseFile(filename string) (Program, []string, []error) {
 		var isImmediate bool
 		var arg1, arg2 byte = 0, 0
 		if len(fields) > 1 {
-			arg1, isImmediate, err = parseArgument(definitions, labels, fields[1])
+			arg1, isImmediate, err = parseArgument(fields[1])
 			if err != nil {
 				errors = append(errors, err)
 				continue
@@ -91,7 +102,7 @@ func ParseFile(filename string) (Program, []string, []error) {
 		}
 
 		if len(fields) > 2 {
-			arg2, _, err = parseArgument(definitions, labels, fields[2])
+			arg2, _, err = parseArgument(fields[2])
 			if err != nil {
 				errors = append(errors, err)
 				continue
@@ -118,6 +129,11 @@ func ParseFile(filename string) (Program, []string, []error) {
 			Arg2: arg2,
 		}
 
+		// Check for special cases
+		if opcode.Binary == ASM_BNE && arg2 == 0 {
+			g_branches = append(g_branches, insPointer)
+		}
+
 		program = append(program, ins)
 		insPointer++
 	}
@@ -126,7 +142,7 @@ func ParseFile(filename string) (Program, []string, []error) {
 }
 
 // Returns value, whether it's immediate or an address
-func parseArgument(definitions map[string]string, labels map[string]byte, str string) (byte, bool, error) {
+func parseArgument(str string) (byte, bool, error) {
 	str = strings.TrimSpace(str)
 	origString := str
 
@@ -138,14 +154,8 @@ func parseArgument(definitions map[string]string, labels map[string]byte, str st
 	}
 
 	// Check if it's a defined string
-	if def, exists := definitions[str]; exists {
+	if def, exists := g_definitions[str]; exists {
 		str = def
-	}
-
-	// ...or a label
-	if lbl, exists := labels[str]; exists {
-		str = fmt.Sprintf("%d", lbl)
-		isImmediate = true
 	}
 
 	// Check if it's a numeric literal in non-decimal
