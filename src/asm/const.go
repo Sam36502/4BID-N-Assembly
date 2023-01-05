@@ -11,6 +11,9 @@ const (
 	DD_LABEL = ".label"
 	DD_DEF   = ".def"
 	DD_EBR   = ".ebr"
+	DD_SUB   = ".sub"
+	DD_JSR   = ".jsr"
+	DD_RTS   = ".rts"
 )
 
 // Number Formats
@@ -43,8 +46,11 @@ const (
 	ASM_JMPM = 0xF // Jump to memory jump vector
 )
 
-// 4BID-N F-Page Addresses
+// 4BID-N Addresses
 const (
+	ZERO_PAGE = 0x0
+	F_PAGE    = 0xF
+
 	FPG_P1_DPAD = 0x0 // Player 1 Direction-Pad
 	FPG_P1_BTNS = 0x1 // Player 1 Buttons
 	FPG_P2_DPAD = 0x2 // Player 2 Direction-Pad

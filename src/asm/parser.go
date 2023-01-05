@@ -17,7 +17,10 @@ type Program []Instruction
 
 var g_lineNr = 0
 var g_definitions = DEFAULT_DEFINITIONS
+var g_labels = map[string]byte{}
+var g_missingLabels = map[string][]byte{}
 var g_branches = []byte{}
+var g_stackPointer byte = 0
 
 // Parses a file into a program and returns a list of warnings and a list of errors
 func ParseFile(filename string) (Program, []string, []error) {
@@ -32,9 +35,28 @@ func ParseFile(filename string) (Program, []string, []error) {
 		return program, warns, errors
 	}
 
-	// Parse file line by line
 	insPointer := byte(0)
 	lines := strings.Split(string(data), "\n")
+
+	// Scan file for labels
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, DD_LABEL) {
+			i := strings.Index(line, CHARS_COMMENT)
+			if i != -1 {
+				line = line[:i]
+			}
+			line = strings.TrimSpace(line)
+			fields := strings.Fields(line)
+			if len(fields) != 2 {
+				errors = append(errors, fmt.Errorf("[pre-parse label-scan]: label dot-directive requires exactly 1 argument: label name"))
+				continue
+			}
+			g_missingLabels[fields[1]] = []byte{}
+		}
+	}
+
+	// Parse file line by line
 	var line string
 	for g_lineNr, line = range lines {
 
@@ -55,14 +77,21 @@ func ParseFile(filename string) (Program, []string, []error) {
 
 		case DD_LABEL:
 			if len(fields) != 2 {
-				errors = append(errors, FormatSyntaxError("label dot-directive requires exactly 1 argument: label name"))
+				errors = append(errors, fmt.Errorf("[pre-parse label-scan]: label dot-directive requires exactly 1 argument: label name"))
 				continue
 			}
-			if insNr, ex := g_definitions[fields[1]]; ex {
-				errors = append(errors, FormatSyntaxError(fmt.Sprintf("label already defined for instruction nr. 0x%02X", insNr)))
-				continue
+			g_labels[fields[1]] = insPointer
+
+			// Update all instructions that didn't know the correct insPointer before
+			// (i.e. all JMPs and such that tried to use this label before it was declared)
+			if _, exists := g_missingLabels[fields[1]]; exists {
+				for _, n := range g_missingLabels[fields[1]] {
+					program[n].Arg1 = insPointer % 16
+					program[n].Arg2 = (insPointer >> 4) % 16
+				}
+				delete(g_missingLabels, fields[1])
 			}
-			g_definitions[fields[1]] = fmt.Sprint(insPointer)
+
 			continue
 
 		case DD_DEF:
@@ -88,21 +117,92 @@ func ParseFile(filename string) (Program, []string, []error) {
 			program[branchLine].Arg2 = skipLines
 			continue
 
+		case DD_RTS:
+			program = append(program, Instruction{
+				Ins:  ASM_JMPM,
+				Arg1: (g_stackPointer << 1) | 0,
+				Arg2: (g_stackPointer << 1) | 1,
+			})
+			g_stackPointer--
+			insPointer++
+			continue
+
+		case DD_JSR:
+			if len(fields) != 2 {
+				errors = append(errors, FormatSyntaxError("jump-to-subroutine dot-directive (.jsr) requires exactly 1 argument: subroutine name"))
+				continue
+			}
+			srLine, exists := g_labels[fields[1]]
+			if !exists {
+				if _, exists := g_missingLabels[fields[1]]; exists {
+					g_missingLabels[fields[1]] = append(g_missingLabels[fields[1]], insPointer+4)
+				} else {
+					errors = append(errors, FormatSyntaxError(fmt.Sprintf("No subroutine (label) named '%s' found to jump to", fields[1])))
+					continue
+				}
+			}
+
+			program = append(program, []Instruction{
+				{
+					Ins:  ASM_LDAI,
+					Arg1: insPointer % 16,
+				},
+				{
+					Ins:  ASM_STA,
+					Arg1: (g_stackPointer << 1) | 0,
+					Arg2: ZERO_PAGE,
+				},
+				{
+					Ins:  ASM_LDAI,
+					Arg1: (insPointer << 4) % 16,
+				},
+				{
+					Ins:  ASM_STA,
+					Arg1: (g_stackPointer << 1) | 1,
+					Arg2: ZERO_PAGE,
+				},
+				{
+					Ins:  ASM_JMPI,
+					Arg1: srLine % 16,
+					Arg2: (srLine >> 4) % 16,
+				},
+			}...)
+
+			g_stackPointer++
+			insPointer += 5
+			continue
+
 		}
 
 		// Parse Arguments
-		var isImmediate bool
+		var isImmediate bool = false
 		var arg1, arg2 byte = 0, 0
 		if len(fields) > 1 {
-			arg1, isImmediate, err = parseArgument(fields[1])
-			if err != nil {
-				errors = append(errors, err)
-				continue
+			str := fields[1]
+			if strings.HasPrefix(str, CHARS_IMMEDIATE) {
+				isImmediate = true
+				str = strings.TrimPrefix(str, CHARS_IMMEDIATE)
+			}
+
+			// Check if it's a label
+			if insNr, exists := g_labels[str]; exists {
+				arg1 = insNr % 16
+				arg2 = (insNr >> 4) % 16
+			} else if _, exists := g_missingLabels[str]; exists {
+				g_missingLabels[str] = append(g_missingLabels[str], insPointer)
+			} else {
+				arg1, err = parseArgument(str)
+				if err != nil {
+					errors = append(errors, err)
+					continue
+				}
 			}
 		}
 
-		if len(fields) > 2 {
-			arg2, _, err = parseArgument(fields[2])
+		if len(fields) > 2 && arg2 == 0 {
+			str := fields[2]
+			str = strings.TrimPrefix(str, CHARS_IMMEDIATE)
+			arg2, err = parseArgument(str)
 			if err != nil {
 				errors = append(errors, err)
 				continue
@@ -138,20 +238,22 @@ func ParseFile(filename string) (Program, []string, []error) {
 		insPointer++
 	}
 
+	// Check for unclosed branches
+	for _, l := range g_branches {
+		errors = append(errors, FormatSyntaxError(fmt.Sprintf("Empty BNE started at instruction %d and never ended.", l)))
+	}
+
+	// Check for undeclared labels
+	for _, l := range g_missingLabels {
+		errors = append(errors, FormatSyntaxError(fmt.Sprintf("label expected by instruction(s) %v that was never declared.", l)))
+	}
+
 	return program, warns, errors
 }
 
-// Returns value, whether it's immediate or an address
-func parseArgument(str string) (byte, bool, error) {
+func parseArgument(str string) (byte, error) {
 	str = strings.TrimSpace(str)
 	origString := str
-
-	// Check if it's an immediate value
-	isImmediate := false
-	if strings.HasPrefix(str, CHARS_IMMEDIATE) {
-		isImmediate = true
-		str = strings.TrimPrefix(str, CHARS_IMMEDIATE)
-	}
 
 	// Check if it's a defined string
 	if def, exists := g_definitions[str]; exists {
@@ -164,18 +266,18 @@ func parseArgument(str string) (byte, bool, error) {
 			str = strings.TrimPrefix(str, prefix)
 			value, err := strconv.ParseUint(str, base, 64)
 			if err != nil {
-				return 0, isImmediate, FormatSyntaxError(fmt.Sprintf("Invalid numeric literal '%s' --> '%s'", origString, str))
+				return 0, FormatSyntaxError(fmt.Sprintf("Invalid numeric literal '%s' --> '%s'", origString, str))
 			}
-			return byte(value), isImmediate, nil
+			return byte(value), nil
 		}
 	}
 
 	// ...otherwise, it's a decimal number
 	value64, err := strconv.ParseUint(str, 10, 64)
 	if err != nil {
-		return 0, isImmediate, FormatSyntaxError(fmt.Sprintf("Invalid numeric literal '%s'", str))
+		return 0, FormatSyntaxError(fmt.Sprintf("Invalid numeric literal '%s'", str))
 	}
-	return byte(value64), isImmediate, nil
+	return byte(value64), nil
 }
 
 func FormatSyntaxError(msg string) error {
