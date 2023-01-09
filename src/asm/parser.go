@@ -20,7 +20,8 @@ var g_definitions = DEFAULT_DEFINITIONS
 var g_labels = map[string]byte{}
 var g_missingLabels = map[string][]byte{}
 var g_branches = []byte{}
-var g_stackPointer byte = 0
+var g_returnVecs = map[string]byte{}
+var g_currSub = ""
 
 // Parses a file into a program and returns a list of warnings and a list of errors
 func ParseFile(filename string) (Program, []string, []error) {
@@ -41,7 +42,7 @@ func ParseFile(filename string) (Program, []string, []error) {
 	// Scan file for labels
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, DD_LABEL) {
+		if strings.HasPrefix(line, DD_LABEL) || strings.HasPrefix(line, DD_SUB) {
 			i := strings.Index(line, CHARS_COMMENT)
 			if i != -1 {
 				line = line[:i]
@@ -49,7 +50,7 @@ func ParseFile(filename string) (Program, []string, []error) {
 			line = strings.TrimSpace(line)
 			fields := strings.Fields(line)
 			if len(fields) != 2 {
-				errors = append(errors, fmt.Errorf("[pre-parse label-scan]: label dot-directive requires exactly 1 argument: label name"))
+				errors = append(errors, fmt.Errorf("[pre-parse label-scan]: label/sub dot-directive requires exactly 1 argument: label name"))
 				continue
 			}
 			g_missingLabels[fields[1]] = []byte{}
@@ -75,9 +76,18 @@ func ParseFile(filename string) (Program, []string, []error) {
 		// Check for dot-directives
 		switch fields[0] {
 
+		case DD_SUB:
+			if len(fields) != 2 {
+				errors = append(errors, fmt.Errorf("subroutine dot-directive requires exactly 1 argument: label name"))
+				continue
+			}
+			g_returnVecs[fields[1]] = byte(len(g_returnVecs))
+			g_currSub = fields[1]
+			fallthrough
+
 		case DD_LABEL:
 			if len(fields) != 2 {
-				errors = append(errors, fmt.Errorf("[pre-parse label-scan]: label dot-directive requires exactly 1 argument: label name"))
+				errors = append(errors, fmt.Errorf("label dot-directive requires exactly 1 argument: label name"))
 				continue
 			}
 			g_labels[fields[1]] = insPointer
@@ -118,13 +128,18 @@ func ParseFile(filename string) (Program, []string, []error) {
 			continue
 
 		case DD_RTS:
+			if g_currSub == "" {
+				errors = append(errors, FormatSyntaxError("return-from-subroutine (.rts) called outside of a subroutine"))
+				continue
+			}
+			returnVector := g_returnVecs[g_currSub]
 			program = append(program, Instruction{
 				Ins:  ASM_JMPM,
-				Arg1: (g_stackPointer << 1) | 0,
-				Arg2: (g_stackPointer << 1) | 1,
+				Arg1: (returnVector << 1) | 0,
+				Arg2: (returnVector << 1) | 1,
 			})
-			g_stackPointer--
 			insPointer++
+			g_currSub = ""
 			continue
 
 		case DD_JSR:
@@ -142,23 +157,25 @@ func ParseFile(filename string) (Program, []string, []error) {
 				}
 			}
 
+			returnVector := insPointer + 5
+			retVecAddr := g_returnVecs[fields[1]]
 			program = append(program, []Instruction{
 				{
 					Ins:  ASM_LDAI,
-					Arg1: insPointer % 16,
+					Arg1: returnVector % 16,
 				},
 				{
 					Ins:  ASM_STA,
-					Arg1: (g_stackPointer << 1) | 0,
+					Arg1: (retVecAddr << 1) | 0,
 					Arg2: ZERO_PAGE,
 				},
 				{
 					Ins:  ASM_LDAI,
-					Arg1: (insPointer << 4) % 16,
+					Arg1: (returnVector >> 4) % 16,
 				},
 				{
 					Ins:  ASM_STA,
-					Arg1: (g_stackPointer << 1) | 1,
+					Arg1: (retVecAddr << 1) | 1,
 					Arg2: ZERO_PAGE,
 				},
 				{
@@ -168,7 +185,6 @@ func ParseFile(filename string) (Program, []string, []error) {
 				},
 			}...)
 
-			g_stackPointer++
 			insPointer += 5
 			continue
 
